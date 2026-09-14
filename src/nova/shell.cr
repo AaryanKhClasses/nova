@@ -1,6 +1,13 @@
+require "./executor"
+require "./builtins"
+
 module Nova
     class Shell
         PROMPT = "nova> "
+
+        def initialize
+            @executor = Executor.new
+        end
 
         def run
             puts "Nova Shell #{Nova::VERSION}"
@@ -15,12 +22,14 @@ module Nova
                 input = input.chomp
                 next if input.empty?
 
-                if input == "exit"
-                    break
-                end
+                parts = input.split
+                command = parts[0]
+                args = parts[1..]
 
-                puts input
+                next if Builtins.execute(command, args)
+                @executor.execute(input)
             end
+            puts
         end
     end
 end
