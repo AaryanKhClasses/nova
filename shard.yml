@@ -1,0 +1,16 @@
+name: nova
+version: 0.1.0
+
+authors:
+  - AaryanKh
+
+targets:
+  nova:
+    main: src/nova.cr
+
+crystal: ">= 1.18.2"
+
+description: |
+  a simple shell written in crystal
+
+license: GNU-GPLv3
