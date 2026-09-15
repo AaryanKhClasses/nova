@@ -50,7 +50,7 @@ module Nova
                     while @position < @input.size
                         char = current_char
                         break if char.whitespace?
-                        break if "|<>-&".includes?(char)
+                        break if "|<>&".includes?(char)
 
                         case char
                         when '"'
