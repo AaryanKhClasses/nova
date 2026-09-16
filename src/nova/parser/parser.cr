@@ -44,7 +44,8 @@ module Nova
                         advance
                     when Lexer::TokenType::RedirectInput,
                          Lexer::TokenType::RedirectOutput,
-                         Lexer::TokenType::RedirectAppend
+                         Lexer::TokenType::RedirectAppend,
+                         Lexer::TokenType::RedirectError
                         redirect = parse_redirects
                         command.add_redirect(redirect)
                     else
@@ -67,6 +68,9 @@ module Nova
                 when Lexer::TokenType::RedirectAppend
                     advance
                     RedirectType::Append
+                when Lexer::TokenType::RedirectError
+                    advance
+                    RedirectType::Error
                 else
                     raise ParserError.new("Expected redirect, but got #{current_token.type}")
                 end

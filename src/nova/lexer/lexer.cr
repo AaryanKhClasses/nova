@@ -37,6 +37,14 @@ module Nova
                     else
                         Token.new(TokenType::RedirectOutput)
                     end
+                when '2'
+                    if @position + 1 < @input.size && @input[@position + 1] == '>'
+                        advance
+                        advance
+                        Token.new(TokenType::RedirectError)
+                    else
+                        read_word
+                    end
                 when '&'
                     advance
                     Token.new(TokenType::Ampersand)
