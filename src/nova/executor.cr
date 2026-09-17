@@ -1,15 +1,16 @@
+require "./builtins"
+require "./parser/ast"
+
 module Nova
     class Executor
-        def execute(pipeline : Parser::Pipeline)
-            if pipeline.commands.size == 1
-                execute_command(pipeline.commands[0])
-            else
+        def execute(program : Parser::Program)
+            program.pipelines.each do |pipeline|
                 execute_pipeline(pipeline)
             end
         end
 
-        def execute_command(command : Parser::Command)
-            return if command.words.empty?
+        def execute_command(command : Parser::Command) : Process::Status?
+            return nil if command.words.empty?
 
             program = command.words[0]
             args = command.words[1..]
@@ -46,14 +47,13 @@ module Nova
                     error: error
                 )
                 status = process.wait
-
-                unless status.success?
-                    STDERR.puts "nova: process exited with status #{status.exit_code}"
-                end
+                status
             rescue ex : File::NotFoundError
                 STDERR.puts "nova: command not found: #{command}"
+                nil
             rescue ex
                 STDERR.puts "nova: error executing command: #{ex.message}"
+                nil
             ensure
                 input_file.try(&.close)
                 output_file.try(&.close)
@@ -66,7 +66,9 @@ module Nova
             return if commands.empty?
 
             if commands.size == 1
-                execute_command(commands[0])
+                command = commands[0]
+                return if Builtins.execute(command)
+                execute_command(command)
                 return
             end
 
@@ -101,9 +103,6 @@ module Nova
 
                 processes.each_with_index do |process, index|
                     status = process.wait
-                    unless status.success?
-                        STDERR.puts "nova: process #{index + 1} exited with status #{status.exit_code}"
-                    end
                 end
             ensure
                 pipes.each do |read_pipe, write_pipe|

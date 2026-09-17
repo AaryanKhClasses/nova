@@ -1,5 +1,7 @@
 require "./executor"
 require "./builtins"
+require "./lexer/lexer"
+require "./parser/parser"
 
 module Nova
     class Shell
@@ -22,12 +24,19 @@ module Nova
                 input = input.chomp
                 next if input.empty?
 
-                parts = input.split
-                command = parts[0]
-                args = parts[1..]
-
-                next if Builtins.execute(command, args)
-                @executor.execute(input)
+                begin
+                    lexer = Lexer::Lexer.new(input)
+                    tokens = lexer.tokenize
+                    parser = Parser::Parser.new(tokens)
+                    program = parser.parse
+                    @executor.execute(program)
+                rescue ex : Lexer::LexerError
+                    STDERR.puts "Lexer error: #{ex.message}"
+                rescue ex : Parser::ParserError
+                    STDERR.puts "Parser error: #{ex.message}"
+                rescue ex
+                    STDERR.puts "Error: #{ex.message}"
+                end
             end
             puts
         end

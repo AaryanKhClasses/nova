@@ -1,7 +1,13 @@
+require "./parser/ast"
+
 module Nova
     module Builtins
-        def self.execute(command : String, args : Array(String)) : Bool
-            case command
+        def self.execute(command : Parser::Command) : Bool
+            return false if command.words.empty?
+            name = command.words[0]
+            args = command.words[1..]
+
+            case name
             when "cd"
                 cd(args)
             when "pwd"
