@@ -2,46 +2,45 @@ require "./parser/ast"
 
 module Nova
     module Builtins
-        def self.execute(command : Parser::Command) : Bool
-            return false if command.words.empty?
+        def self.execute(command : Parser::Command, input : IO = STDIN, output : IO = STDOUT, error : IO = STDERR) : Int32?
+            return nil if command.words.empty?
             name = command.words[0]
             args = command.words[1..]
 
             case name
             when "cd"
-                cd(args)
+                cd(args, error)
             when "pwd"
-                pwd
+                pwd(output)
             when "echo"
-                echo(args)
+                echo(args, output)
             when "exit"
                 exit
             else
-                return false
+                nil
             end
-            true
         end
 
-        private def self.cd(args : Array(String))
-            if args.empty?
-                Dir.cd(ENV["HOME"] || "/")
-                return
-            end
+        private def self.cd(args : Array(String), error : IO) : Int32
+            path = args.empty? ? (ENV["HOME"] || "/") : args[0]
 
-            path = args[0]
             begin
                 Dir.cd(path)
+                0
             rescue ex : Exception
-                puts "cd: #{ex.message}"
+                error.puts "cd: #{ex.message}"
+                1
             end
         end
 
-        private def self.pwd
-            puts Dir.current
+        private def self.pwd(output : IO) : Int32
+            output.puts Dir.current
+            0
         end
 
-        private def self.echo(args : Array(String))
-            puts args.join(" ")
+        private def self.echo(args : Array(String), output : IO) : Int32
+            output.puts args.join(" ")
+            0
         end
 
         private def self.exit

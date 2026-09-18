@@ -67,7 +67,7 @@ module Nova
 
             if commands.size == 1
                 command = commands[0]
-                return if Builtins.execute(command)
+                return if execute_builtin(command)
                 execute_command(command)
                 return
             end
@@ -153,6 +153,83 @@ module Nova
                 process
             ensure
                 opened_files.each(&.close)
+            end
+        end
+
+        private def execute_builtin(command : Parser::Command) : Bool
+            input = STDIN
+            output = STDOUT
+            error = STDERR
+
+            input_file = nil
+            output_file = nil
+            error_file = nil
+
+            begin
+                command.redirects.each do |redirect|
+                    case redirect.type
+                    when Parser::RedirectType::Input
+                        input_file = File.open(redirect.target, "r")
+                        input = input_file
+                    when Parser::RedirectType::Output
+                        output_file = File.open(redirect.target, "w")
+                        output = output_file
+                    when Parser::RedirectType::Append
+                        output_file = File.open(redirect.target, "a")
+                        output = output_file
+                    when Parser::RedirectType::Error
+                        error_file = File.open(redirect.target, "w")
+                        error = error_file
+                    end
+                end
+                result = Builtins.execute(command, input, output, error)
+                !result.nil?
+            ensure
+                input_file.try(&.close)
+                output_file.try(&.close)
+                error_file.try(&.close)
+            end
+        end
+
+        private def execute_command_with_io(command : Parser::Command, input : IO, output : IO, error : IO) : Bool
+            result = Builtins.execute(command, input, output, error)
+            !result.nil?
+        end
+
+        private def spawn_builtin(command : Parser::Command, input : IO, output : IO, error : IO) : Fiber
+            spawn do
+                input_file = nil
+                output_file = nil
+                error_file = nil
+
+                begin
+                    process_input = input
+                    process_output = output
+                    process_error = error
+
+                    commands.redirects.each do |redirect|
+                        case redirect.type
+                        when Parser::RedirectType::Input
+                            input_file = File.open(redirect.target, "r")
+                            process_input = input_file
+                        when Parser::RedirectType::Output
+                            output_file = File.open(redirect.target, "w")
+                            process_output = output_file
+                        when Parser::RedirectType::Append
+                            output_file = File.open(redirect.target, "a")
+                            process_output = output_file
+                        when Parser::RedirectType::Error
+                            error_file = File.open(redirect.target, "w")
+                            process_error = error_file
+                        end
+                    end
+
+                    Builtins.execute(command, process_input, process_output, process_error)
+                ensure
+                    input_file.try(&.close)
+                    output_file.try(&.close)
+                    error_file.try(&.close)
+                end
             end
         end
     end
