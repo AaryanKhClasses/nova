@@ -40,7 +40,7 @@ module Nova
                     token = current_token
                     case token.type
                     when Lexer::TokenType::Word
-                        command.add_word(token.value)
+                        command.add_word(parse_word(token))
                         advance
                     when Lexer::TokenType::RedirectInput,
                          Lexer::TokenType::RedirectOutput,
@@ -77,6 +77,21 @@ module Nova
 
                 target = expect(Lexer::TokenType::Word)
                 Redirect.new(type, target.value)
+            end
+
+            private def parse_word(token : Lexer::Token) : Word
+                word = Word.new
+                token.parts.each do |part|
+                    case part.quote
+                    when Lexer::QuoteType::None
+                        word.add_part(LiteralPart.new(part.value))
+                    when Lexer::QuoteType::Single
+                        word.add_part(SingleQuotedPart.new(part.value))
+                    when Lexer::QuoteType::Double
+                        word.add_part(DoubleQuotedPart.new(part.value))
+                    end
+                end
+                word
             end
 
             private def current_token : Lexer::Token

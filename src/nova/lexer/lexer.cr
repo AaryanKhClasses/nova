@@ -54,6 +54,8 @@ module Nova
             end
 
             private def read_word : Token
+                parts = [] of WordPart
+
                 value = String.build do |str|
                     while @position < @input.size
                         char = current_char
@@ -62,28 +64,47 @@ module Nova
 
                         case char
                         when '"'
-                            read_quoted_string(str, '"')
+                            part = read_quoted_string('"')
+                            parts << part
+                            str << part.value
                         when '\''
-                            read_quoted_string(str, '\'')
+                            part = read_quoted_string('\'')
+                            parts << part
+                            str << part.value
                         else
-                            str << char
-                            advance
+                            start = @position
+                            while @position < @input.size
+                                char = current_char
+                                break if char.whitespace?
+                                break if "|<>&".includes?(char)
+                                advance
+                            end
+
+                            literal = @input[start...@position]
+                            unless literal.empty?
+                                parts << WordPart.new(literal, QuoteType::None)
+                                str << literal
+                            end
                         end
                     end
                 end
                 Token.new(TokenType::Word, value)
             end
 
-            private def read_quoted_string(str : String::Builder, quote : Char)
+            private def read_quoted_string(quote : Char)
                 advance
-                while @position < @input.size
-                    char = current_char
-                    if char == quote
+
+                value = String.build do |str|
+                    while @position < @input.size
+                        char = current_char
+                        if char == quote
+                            advance
+                            quote_type = quote = '"' ? QuoteType::Double : QuoteType::Single
+                            return WordPart.new(str.to_s, quote_type)
+                        end
+                        str << char
                         advance
-                        return
                     end
-                    str << char
-                    advance
                 end
 
                 quote_name = quote == '"' ? "double" : "single"

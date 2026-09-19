@@ -1,3 +1,5 @@
+require "./word"
+
 module Nova
     module Parser
         abstract class ASTNode
@@ -33,11 +35,11 @@ module Nova
             getter redirects
 
             def initialize
-                @words = [] of String
+                @words = [] of Word
                 @redirects = [] of Redirect
             end
 
-            def add_word(word : String)
+            def add_word(word : Word)
                 @words << word
             end
 
