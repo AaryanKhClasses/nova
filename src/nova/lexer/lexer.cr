@@ -88,7 +88,7 @@ module Nova
                         end
                     end
                 end
-                Token.new(TokenType::Word, value)
+                Token.new(TokenType::Word, value, parts)
             end
 
             private def read_quoted_string(quote : Char)

@@ -1,8 +1,14 @@
 require "./builtins"
 require "./parser/ast"
+require "./expander/expander"
 
 module Nova
     class Executor
+        def initialize
+            @environment = Expander::Environment.new
+            @expander = Expander::Expander.new(@environment)
+        end
+
         def execute(program : Parser::Program)
             program.pipelines.each do |pipeline|
                 execute_pipeline(pipeline)
@@ -12,8 +18,9 @@ module Nova
         def execute_command(command : Parser::Command) : Process::Status?
             return nil if command.words.empty?
 
-            program = command.words[0]
-            args = command.words[1..]
+            words = command_arguments(command)
+            program = words[0]
+            args = words[1..]
 
             input_file = nil
             output_file = nil
@@ -49,7 +56,7 @@ module Nova
                 status = process.wait
                 status
             rescue ex : File::NotFoundError
-                STDERR.puts "nova: command not found: #{command}"
+                STDERR.puts "nova: command not found: #{program}"
                 nil
             rescue ex
                 STDERR.puts "nova: error executing command: #{ex.message}"
@@ -67,6 +74,7 @@ module Nova
 
             if commands.size == 1
                 command = commands[0]
+                return if execute_assignment(command)
                 return if execute_builtin(command)
                 execute_command(command)
                 return
@@ -113,8 +121,9 @@ module Nova
         end
 
         private def spawn_process(command : Parser::Command, input : Process::Redirect | IO::FileDescriptor, output : Process::Redirect | IO::FileDescriptor) : Process
-            program = command.words[0]
-            args = command.words[1..]
+            words = command_arguments(command)
+            program = words[0]
+            args = words[1..]
 
             process_input = input
             process_output = output
@@ -182,7 +191,8 @@ module Nova
                         error = error_file
                     end
                 end
-                result = Builtins.execute(command, input, output, error)
+                words = command_arguments(command)
+                result = Builtins.execute(words, input, output, error)
                 !result.nil?
             ensure
                 input_file.try(&.close)
@@ -231,6 +241,26 @@ module Nova
                     error_file.try(&.close)
                 end
             end
+        end
+
+        private def command_arguments(command : Parser::Command) : Array(String)
+            command.words.map do |word|
+                @expander.expand_word(word)
+            end
+        end
+
+        private def execute_assignment(command : Parser::Command) : Bool
+            return false unless command.words.size == 1
+            return false unless command.redirects.empty?
+
+            raw = @expander.expand_word(command.words[0])
+            return true if raw.match(/\A\$[A-Za-z_][A-Za-z0-9_]*=/)
+
+            match = raw.match(/\A([A-Za-z_][A-Za-z0-9_]*)=(.*)\z/)
+            return false unless match
+
+            @environment.set(match[1], match[2])
+            true
         end
     end
 end

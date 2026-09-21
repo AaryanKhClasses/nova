@@ -1,11 +1,9 @@
-require "./parser/ast"
-
 module Nova
     module Builtins
-        def self.execute(command : Parser::Command, input : IO = STDIN, output : IO = STDOUT, error : IO = STDERR) : Int32?
-            return nil if command.words.empty?
-            name = command.words[0]
-            args = command.words[1..]
+        def self.execute(words : Array(String), input : IO = STDIN, output : IO = STDOUT, error : IO = STDERR) : Int32?
+            return nil if words.empty?
+            name = words[0]
+            args = words[1..]
 
             case name
             when "cd"
