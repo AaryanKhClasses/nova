@@ -99,7 +99,7 @@ module Nova
                         char = current_char
                         if char == quote
                             advance
-                            quote_type = quote = '"' ? QuoteType::Double : QuoteType::Single
+                            quote_type = quote == '"' ? QuoteType::Double : QuoteType::Single
                             return WordPart.new(str.to_s, quote_type)
                         end
                         str << char

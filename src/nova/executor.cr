@@ -9,14 +9,18 @@ module Nova
             @expander = Expander::Expander.new(@environment)
         end
 
-        def execute(program : Parser::Program)
+        def execute(program : Parser::Program) : Int32
+            status = 0
             program.pipelines.each do |pipeline|
-                execute_pipeline(pipeline)
+                status = execute_pipeline(pipeline)
             end
+
+            @environment.set_last_status(status)
+            status
         end
 
-        def execute_command(command : Parser::Command) : Process::Status?
-            return nil if command.words.empty?
+        def execute_command(command : Parser::Command) : Int32
+            return 0 if command.words.empty?
 
             words = command_arguments(command)
             program = words[0]
@@ -31,18 +35,19 @@ module Nova
                 error = Process::Redirect::Inherit
 
                 command.redirects.each do |redirect|
+                    target = @expander.expand_string(redirect.target)
                     case redirect.type
                     when Parser::RedirectType::Input
-                        input_file = File.open(redirect.target, "r")
+                        input_file = File.open(target, "r")
                         input = input_file
                     when Parser::RedirectType::Output
-                        output_file = File.open(redirect.target, "w")
+                        output_file = File.open(target, "w")
                         output = output_file
                     when Parser::RedirectType::Append
-                        output_file = File.open(redirect.target, "a")
+                        output_file = File.open(target, "a")
                         output = output_file
                     when Parser::RedirectType::Error
-                        error_file = File.open(redirect.target, "w")
+                        error_file = File.open(target, "w")
                         error = error_file
                     end
                 end
@@ -54,13 +59,13 @@ module Nova
                     error: error
                 )
                 status = process.wait
-                status
+                status.exit_code
             rescue ex : File::NotFoundError
                 STDERR.puts "nova: command not found: #{program}"
-                nil
+                127
             rescue ex
                 STDERR.puts "nova: error executing command: #{ex.message}"
-                nil
+                1
             ensure
                 input_file.try(&.close)
                 output_file.try(&.close)
@@ -68,16 +73,17 @@ module Nova
             end
         end
 
-        private def execute_pipeline(pipeline : Parser::Pipeline)
+        private def execute_pipeline(pipeline : Parser::Pipeline) : Int32
             commands = pipeline.commands
-            return if commands.empty?
+            return 0 if commands.empty?
 
             if commands.size == 1
                 command = commands[0]
-                return if execute_assignment(command)
-                return if execute_builtin(command)
-                execute_command(command)
-                return
+                assignment_status = execute_assignment(command)
+                return 0 if assignment_status
+                builtin_status = execute_builtin(command)
+                return builtin_status unless builtin_status.nil?
+                return execute_command(command)
             end
 
             processes = [] of Process
@@ -109,9 +115,11 @@ module Nova
                     write_pipe.close unless write_pipe.closed?
                 end
 
+                status = 0
                 processes.each_with_index do |process, index|
-                    status = process.wait
+                    status = process.wait.exit_code
                 end
+                status
             ensure
                 pipes.each do |read_pipe, write_pipe|
                     read_pipe.close unless read_pipe.closed?
@@ -133,21 +141,22 @@ module Nova
 
             begin
                 command.redirects.each do |redirect|
+                    target = @expander.expand_string(redirect.target)
                     case redirect.type
                     when Parser::RedirectType::Input
-                        file = File.open(redirect.target, "r")
+                        file = File.open(target, "r")
                         opened_files << file
                         process_input = file
                     when Parser::RedirectType::Output
-                        file = File.open(redirect.target, "w")
+                        file = File.open(target, "w")
                         opened_files << file
                         process_output = file
                     when Parser::RedirectType::Append
-                        file = File.open(redirect.target, "a")
+                        file = File.open(target, "a")
                         opened_files << file
                         process_output = file
                     when Parser::RedirectType::Error
-                        file = File.open(redirect.target, "w")
+                        file = File.open(target, "w")
                         opened_files << file
                         process_error = file
                     end
@@ -165,7 +174,7 @@ module Nova
             end
         end
 
-        private def execute_builtin(command : Parser::Command) : Bool
+        private def execute_builtin(command : Parser::Command) : Int32?
             input = STDIN
             output = STDOUT
             error = STDERR
@@ -176,24 +185,25 @@ module Nova
 
             begin
                 command.redirects.each do |redirect|
+                    target = @expander.expand_string(redirect.target)
                     case redirect.type
                     when Parser::RedirectType::Input
-                        input_file = File.open(redirect.target, "r")
+                        input_file = File.open(target, "r")
                         input = input_file
                     when Parser::RedirectType::Output
-                        output_file = File.open(redirect.target, "w")
+                        output_file = File.open(target, "w")
                         output = output_file
                     when Parser::RedirectType::Append
-                        output_file = File.open(redirect.target, "a")
+                        output_file = File.open(target, "a")
                         output = output_file
                     when Parser::RedirectType::Error
-                        error_file = File.open(redirect.target, "w")
+                        error_file = File.open(target, "w")
                         error = error_file
                     end
                 end
                 words = command_arguments(command)
                 result = Builtins.execute(words, input, output, error)
-                !result.nil?
+                result
             ensure
                 input_file.try(&.close)
                 output_file.try(&.close)
@@ -218,18 +228,19 @@ module Nova
                     process_error = error
 
                     commands.redirects.each do |redirect|
+                        target = @expander.expand_string(redirect.target)
                         case redirect.type
                         when Parser::RedirectType::Input
-                            input_file = File.open(redirect.target, "r")
+                            input_file = File.open(target, "r")
                             process_input = input_file
                         when Parser::RedirectType::Output
-                            output_file = File.open(redirect.target, "w")
+                            output_file = File.open(target, "w")
                             process_output = output_file
                         when Parser::RedirectType::Append
-                            output_file = File.open(redirect.target, "a")
+                            output_file = File.open(target, "a")
                             process_output = output_file
                         when Parser::RedirectType::Error
-                            error_file = File.open(redirect.target, "w")
+                            error_file = File.open(target, "w")
                             process_error = error_file
                         end
                     end
@@ -261,6 +272,10 @@ module Nova
 
             @environment.set(match[1], match[2])
             true
+        end
+
+        private def expand_redirect_target(target : String) : String
+            @expander.expand_string(target)
         end
     end
 end
