@@ -1,5 +1,6 @@
 require "../parser/word"
 require "./environment"
+require "./globber"
 
 module Nova
     module Expander
@@ -7,10 +8,11 @@ module Nova
             getter environment
 
             def initialize(@environment : Environment)
+                @globber = Globber.new
             end
 
-            def expand_word(word : Parser::Word) : String
-                String.build do |str|
+            def expand_word(word : Parser::Word) : Array(String)
+                unqouted = String.build do |str|
                     word.parts.each do |part|
                         case part
                         when Parser::LiteralPart
@@ -22,6 +24,17 @@ module Nova
                         end
                     end
                 end
+
+                has_unquoted_glob  = word.parts.any? do |part|
+                    case part
+                    when Parser::LiteralPart
+                        contains_glob?(part.value)
+                    else
+                        false
+                    end
+                end
+
+                has_unquoted_glob ? @globber.expand(unqouted) : [unqouted]
             end
 
             def expand_string(value : String) : String
@@ -99,6 +112,10 @@ module Nova
 
             private def valid_variable_char?(char : Char) : Bool
                 char == '_' || char.ascii_letter? || char.ascii_number?
+            end
+
+            private def contains_glob?(value : String) : Bool
+                value.includes?('*') || value.includes?('?') || value.includes?('[')
             end
         end
     end

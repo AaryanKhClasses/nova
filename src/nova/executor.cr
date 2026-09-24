@@ -95,17 +95,8 @@ module Nova
                 end
 
                 commands.each_with_index do |command, index|
-                    input = if index == 0
-                        Process::Redirect::Inherit
-                    else
-                        pipes[index - 1][0]
-                    end
-                    output = if index == commands.size - 1
-                        Process::Redirect::Inherit
-                    else
-                        pipes[index][1]
-                    end
-
+                    input = index == 0 ? Process::Redirect::Inherit : pipes[index - 1][0]
+                    output = index == commands.size - 1 ? Process::Redirect::Inherit : pipes[index][1]
                     process = spawn_process(command, input, output)
                     processes << process
                 end
@@ -255,7 +246,7 @@ module Nova
         end
 
         private def command_arguments(command : Parser::Command) : Array(String)
-            command.words.map do |word|
+            command.words.flat_map do |word|
                 @expander.expand_word(word)
             end
         end
@@ -264,7 +255,10 @@ module Nova
             return false unless command.words.size == 1
             return false unless command.redirects.empty?
 
-            raw = @expander.expand_word(command.words[0])
+            expanded = @expander.expand_word(command.words[0])
+            return false unless expanded.size == 1
+
+            raw = expanded[0]
             return true if raw.match(/\A\$[A-Za-z_][A-Za-z0-9_]*=/)
 
             match = raw.match(/\A([A-Za-z_][A-Za-z0-9_]*)=(.*)\z/)

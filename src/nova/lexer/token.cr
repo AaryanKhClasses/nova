@@ -25,11 +25,7 @@ module Nova
             end
 
             def to_s
-                if @value.empty?
-                    @type.to_s
-                else
-                    "#{@type}(#{@value})"
-                end
+                @value.empty? ? @type.to_s : "#{@type}(#{@value})"
             end
         end
     end

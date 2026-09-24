@@ -64,25 +64,5 @@ module Nova
                 @target = target
             end
         end
-
-        # ! DEBUG
-        class ASTPrinter
-            def self.print(program : Program)
-                puts "Program"
-                program.pipelines.each_with_index do |pipeline, pipeline_index|
-                    puts " Pipeline #{pipeline_index}"
-                    pipeline.commands.each_with_index do |command, command_index|
-                        puts "  Command #{command_index}"
-                        command.words.each do |word|
-                            puts "   Word: #{word}"
-                        end
-                        command.redirects.each do |redirect|
-                            puts "   Redirect: #{redirect.type} -> #{redirect.target}"
-                        end
-                    end
-                    puts "  Background: #{pipeline.background}"
-                end
-            end
-        end
     end
 end
