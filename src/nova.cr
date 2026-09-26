@@ -3,7 +3,7 @@ require "./nova/lexer/lexer"
 require "./nova/parser/parser"
 
 module Nova
-    VERSION = "0.1.8"
+    VERSION = "0.1.9a"
 end
 
 Nova::Shell.new.run

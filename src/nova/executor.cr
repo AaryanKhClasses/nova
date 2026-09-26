@@ -1,25 +1,32 @@
 require "./builtins"
 require "./parser/ast"
 require "./expander/expander"
+require "./lexer/lexer"
+require "./parser/parser"
 
 module Nova
     class Executor
         def initialize
             @environment = Expander::Environment.new
-            @expander = Expander::Expander.new(@environment)
+            @expander = Expander::Expander.new(
+                @environment,
+                ->(command : String, output : IO) {
+                    execute_substitution(command, output)
+                }
+            )
         end
 
-        def execute(program : Parser::Program) : Int32
+        def execute(program : Parser::Program, input : IO = STDIN, output : IO = STDOUT, error : IO = STDERR) : Int32
             status = 0
             program.pipelines.each do |pipeline|
-                status = execute_pipeline(pipeline)
+                status = execute_pipeline(pipeline, input, output, error)
             end
 
             @environment.set_last_status(status)
             status
         end
 
-        def execute_command(command : Parser::Command) : Int32
+        def execute_command(command : Parser::Command, input : IO, output : IO, error : IO) : Int32
             return 0 if command.words.empty?
 
             words = command_arguments(command)
@@ -30,9 +37,9 @@ module Nova
             output_file = nil
             error_file = nil
             begin
-                input = Process::Redirect::Inherit
-                output = Process::Redirect::Inherit
-                error = Process::Redirect::Inherit
+                process_input = input
+                process_output = output
+                process_error = error
 
                 command.redirects.each do |redirect|
                     target = @expander.expand_string(redirect.target)
@@ -73,7 +80,7 @@ module Nova
             end
         end
 
-        private def execute_pipeline(pipeline : Parser::Pipeline) : Int32
+        private def execute_pipeline(pipeline : Parser::Pipeline, input : IO, output : IO, error : IO) : Int32
             commands = pipeline.commands
             return 0 if commands.empty?
 
@@ -81,9 +88,9 @@ module Nova
                 command = commands[0]
                 assignment_status = execute_assignment(command)
                 return 0 if assignment_status
-                builtin_status = execute_builtin(command)
+                builtin_status = execute_builtin(command, input, output, error)
                 return builtin_status unless builtin_status.nil?
-                return execute_command(command)
+                return execute_command(command, input, output, error)
             end
 
             processes = [] of Process
@@ -165,10 +172,10 @@ module Nova
             end
         end
 
-        private def execute_builtin(command : Parser::Command) : Int32?
-            input = STDIN
-            output = STDOUT
-            error = STDERR
+        private def execute_builtin(command : Parser::Command, input : IO, output : IO, error : IO) : Int32?
+            builtin_input = input
+            builtin_output = output
+            builtin_error = error
 
             input_file = nil
             output_file = nil
@@ -180,20 +187,20 @@ module Nova
                     case redirect.type
                     when Parser::RedirectType::Input
                         input_file = File.open(target, "r")
-                        input = input_file
+                        builtin_input = input_file
                     when Parser::RedirectType::Output
                         output_file = File.open(target, "w")
-                        output = output_file
+                        builtin_output = output_file
                     when Parser::RedirectType::Append
                         output_file = File.open(target, "a")
-                        output = output_file
+                        builtin_output = output_file
                     when Parser::RedirectType::Error
                         error_file = File.open(target, "w")
-                        error = error_file
+                        builtin_error = error_file
                     end
                 end
                 words = command_arguments(command)
-                result = Builtins.execute(words, input, output, error)
+                result = Builtins.execute(words, builtin_input, builtin_output, builtin_error)
                 result
             ensure
                 input_file.try(&.close)
@@ -270,6 +277,14 @@ module Nova
 
         private def expand_redirect_target(target : String) : String
             @expander.expand_string(target)
+        end
+
+        private def execute_substitution(command : String, output : IO) : Int32
+            lexer = Lexer::Lexer.new(command)
+            tokens = lexer.tokenize
+            parser = Parser::Parser.new(tokens)
+            program = parser.parse
+            execute(program, input: STDIN, output: output, error: STDERR)
         end
     end
 end

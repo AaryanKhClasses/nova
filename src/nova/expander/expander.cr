@@ -1,14 +1,24 @@
 require "../parser/word"
 require "./environment"
 require "./globber"
+require "./substituter"
 
 module Nova
     module Expander
         class Expander
             getter environment
+            @cmd_executor : Nova::Expander::CommandExecutor?
 
-            def initialize(@environment : Environment)
+            def initialize(
+                @environment : Environment,
+                cmd_executor : Nova::Expander::CommandExecutor? = nil
+            )
+                @cmd_executor = cmd_executor
                 @globber = Globber.new
+
+                @substituter = if executor = @cmd_executor
+                    Nova::Expander::Substituter.new(executor)
+                end
             end
 
             def expand_word(word : Parser::Word) : Array(String)
@@ -16,11 +26,13 @@ module Nova
                     word.parts.each do |part|
                         case part
                         when Parser::LiteralPart
-                            expand_variables(part.value, str)
+                            expanded = expand_substitutions(part.value)
+                            expand_variables(expanded, str)
                         when Parser::SingleQuotedPart
                             str << part.value
                         when Parser::DoubleQuotedPart
-                            expand_variables(part.value, str)
+                            expanded = expand_substitutions(part.value)
+                            expand_variables(expanded, str)
                         end
                     end
                 end
@@ -116,6 +128,46 @@ module Nova
 
             private def contains_glob?(value : String) : Bool
                 value.includes?('*') || value.includes?('?') || value.includes?('[')
+            end
+
+            private def expand_substitutions(value : String) : String
+                String.build do |str|
+                    position = 0
+                    while position < value.size
+                        if value[position] == '$' && position + 1 < value.size && value[position + 1] == '('
+                            closing = find_substitution_end(value, position)
+                            if closing.nil?
+                                str << value[position]
+                                position += 1
+                                next
+                            end
+
+                            command = value[(position + 2)...closing]
+                            @substituter ? str << @substituter.not_nil!.execute(command) : str << value[position..closing]
+                            position = closing + 1
+                        else
+                            str << value[position]
+                            position += 1
+                        end
+                    end
+                end
+            end
+
+            private def find_substitution_end(value : String, start : Int32) : Int32?
+                depth = 0
+                position = start + 2
+                while position < value.size
+                    case value[position]
+                    when '('
+                        depth += 1
+                    when ')'
+                        return position if depth == 0
+                        depth -= 1
+                    end
+
+                    position += 1
+                end
+                nil
             end
         end
     end
