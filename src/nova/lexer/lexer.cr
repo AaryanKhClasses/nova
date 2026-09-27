@@ -73,10 +73,23 @@ module Nova
                             str << part.value
                         else
                             start = @position
+                            substitution_depth = 0
                             while @position < @input.size
                                 char = current_char
-                                break if char.whitespace?
+                                break if char.whitespace? && substitution_depth == 0
                                 break if "|<>&".includes?(char)
+
+                                if char == '$' && @position + 1 < @input.size && @input[@position + 1] == '('
+                                    substitution_depth += 1
+                                    advance
+                                    advance
+                                    next
+                                elsif char == '(' && substitution_depth > 0
+                                    substitution_depth += 1
+                                elsif char == ')' && substitution_depth > 0
+                                    substitution_depth -= 1
+                                end
+
                                 advance
                             end
 
